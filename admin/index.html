@@ -1,12 +1,278 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="robots" content="noindex">
-  <title>Admin | Nakibus Salehin</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Admin | Nakibus Salehin</title>
+<style>
+  body { font-family: "Segoe UI", system-ui, sans-serif; margin: 0; background: #f4f3fb; color: #1a1560; }
+  header { background: linear-gradient(135deg, #8b7bff, #1a1560); color: #fff; padding: 16px 24px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
+  main { max-width: 920px; margin: 24px auto; padding: 0 16px; }
+  .card { background: #fff; border-radius: 16px; padding: 20px; margin-bottom: 18px; box-shadow: 0 8px 24px rgba(26,21,96,.08); }
+  label { display: block; font-size: .85rem; color: #5b5a86; margin: 10px 0 4px; }
+  input { width: 100%; padding: 10px 12px; border: 1px solid #d9d6f2; border-radius: 10px; font: inherit; box-sizing: border-box; }
+  button { background: linear-gradient(135deg, #8b7bff, #6a4dff); color: #fff; border: 0; border-radius: 999px; padding: 10px 18px; font-weight: 700; cursor: pointer; margin: 8px 8px 0 0; }
+  button.ghost { background: #eeebff; color: #3b2fb8; }
+  button.danger { background: #ffe4e8; color: #b3263e; }
+  .row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+  .item { border: 1px solid #ece9fb; border-radius: 12px; padding: 14px; margin: 12px 0; }
+  .tabs button { background: #eeebff; color: #3b2fb8; }
+  .tabs button.on { background: #6a4dff; color: #fff; }
+  .msg { padding: 10px 14px; border-radius: 10px; margin: 12px 0; display: none; }
+  .ok { background: #e7fbef; color: #146c3a; }
+  .err { background: #ffe4e8; color: #b3263e; }
+  .thumbs img { width: 72px; height: 72px; object-fit: cover; border-radius: 10px; margin: 4px; border: 1px solid #ece9fb; }
+  small { color: #7a78a3; }
+  @media (max-width: 700px) { .row { grid-template-columns: 1fr; } }
+</style>
 </head>
 <body>
-  <script src="https://identity.netlify.com/v1/netlify-identity-widget.js"></script>
-  <script src="https://unpkg.com/decap-cms@^3.0.0/dist/decap-cms.js"></script>
+<header><b>Nakibus Salehin · Admin</b><span id="who"></span></header>
+<main>
+
+  <div class="card" id="tokenBox">
+    <h3>GitHub connection</h3>
+    <p><small>Ekbar token diye connect korle ei browser e mone thakbe. Token ta shudhu apnar nijer computer e thakbe.</small></p>
+    <label>GitHub token (github_pat_...)</label>
+    <input id="token" type="password" placeholder="github_pat_...">
+    <button onclick="saveToken()">Connect</button>
+    <div id="connMsg" class="msg"></div>
+  </div>
+
+  <div id="app" style="display:none">
+    <div class="tabs">
+      <button id="tabSite" class="on" onclick="show('site')">Contact & Stats</button>
+      <button id="tabWork" onclick="show('work')">Selected Work</button>
+    </div>
+    <div id="siteView" class="card"></div>
+    <div id="workView" class="card" style="display:none"></div>
+    <div id="msg" class="msg"></div>
+  </div>
+
+</main>
+
+<script>
+const OWNER = 'nakibussalehin-coder', REPO = 'nakibus-portfolio', BRANCH = 'main';
+let TOKEN = localStorage.getItem('gh_token') || '';
+let site = null, work = null, shas = {};
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+function flash(text, ok) { const m = $('msg'); m.className = 'msg ' + (ok ? 'ok' : 'err'); m.textContent = text; m.style.display = 'block'; setTimeout(() => m.style.display = 'none', 6000); }
+function connFlash(text, ok) { const m = $('connMsg'); m.className = 'msg ' + (ok ? 'ok' : 'err'); m.textContent = text; m.style.display = 'block'; }
+
+async function api(path, opts) {
+  const res = await fetch('https://api.github.com/repos/' + OWNER + '/' + REPO + '/contents/' + path, Object.assign({
+    headers: { 'Authorization': 'Bearer ' + TOKEN, 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json' }
+  }, opts || {}));
+  if (!res.ok) throw new Error(res.status + ' ' + (await res.text()).slice(0, 160));
+  return res.json();
+}
+function decodeB64(b64) {
+  const bin = atob(b64.replace(/\n/g, ''));
+  const bytes = Uint8Array.from(bin, c => c.charCodeAt(0));
+  return new TextDecoder().decode(bytes);
+}
+function encodeText(text) {
+  const bytes = new TextEncoder().encode(text);
+  let bin = ''; bytes.forEach(b => bin += String.fromCharCode(b));
+  return btoa(bin);
+}
+async function readJSON(path) {
+  const j = await api(path + '?ref=' + BRANCH);
+  shas[path] = j.sha;
+  return JSON.parse(decodeB64(j.content));
+}
+async function writeText(path, text, message) {
+  const body = { message: message, content: encodeText(text), branch: BRANCH };
+  if (shas[path]) body.sha = shas[path];
+  const j = await api(path, { method: 'PUT', body: JSON.stringify(body) });
+  shas[path] = j.content.sha;
+}
+async function uploadBinary(path, file, message) {
+  const b64 = await new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result.split(',')[1]);
+    r.onerror = reject;
+    r.readAsDataURL(file);
+  });
+  let sha = null;
+  try { sha = (await api(path + '?ref=' + BRANCH)).sha; } catch (e) {}
+  const body = { message: message, content: b64, branch: BRANCH };
+  if (sha) body.sha = sha;
+  await api(path, { method: 'PUT', body: JSON.stringify(body) });
+}
+
+async function saveToken() {
+  TOKEN = $('token').value.trim();
+  if (!TOKEN) { connFlash('Token ta din', false); return; }
+  try {
+    site = await readJSON('content/site.json');
+    work = await readJSON('content/work.json');
+    localStorage.setItem('gh_token', TOKEN);
+    $('who').textContent = 'Connected';
+    $('tokenBox').style.display = 'none';
+    $('app').style.display = 'block';
+    renderSite();
+    renderWork();
+  } catch (e) {
+    connFlash('Connect hoyni: ' + e.message, false);
+  }
+}
+
+function show(which) {
+  $('siteView').style.display = which === 'site' ? 'block' : 'none';
+  $('workView').style.display = which === 'work' ? 'block' : 'none';
+  $('tabSite').classList.toggle('on', which === 'site');
+  $('tabWork').classList.toggle('on', which === 'work');
+}
+
+/* ---------- Contact & Stats ---------- */
+function renderSite() {
+  while ((site.stats || []).length < 3) site.stats = (site.stats || []).concat([{ number: 0, suffix: '+', label: '' }]);
+  const st = site.stats;
+  $('siteView').innerHTML = `
+    <h3>Contact</h3>
+    <div class="row">
+      <div><label>WhatsApp (880 diye, + chhara)</label><input id="s_wa" value="${esc(site.whatsapp)}"></div>
+      <div><label>Email</label><input id="s_em" value="${esc(site.email)}"></div>
+      <div><label>Facebook page URL</label><input id="s_fb" value="${esc(site.facebook)}"></div>
+    </div>
+    <label>Instagram URL (khali rakhle button dekhabe na)</label>
+    <input id="s_ig" value="${esc(site.instagram)}">
+    <h3 style="margin-top:22px">Stats</h3>
+    ${st.map((x, i) => `
+      <div class="row">
+        <div><label>Number</label><input type="number" id="n${i}" value="${esc(x.number)}"></div>
+        <div><label>Label</label><input id="l${i}" value="${esc(x.label)}"></div>
+        <div><label>Suffix</label><input id="x${i}" value="${esc(x.suffix)}"></div>
+      </div>`).join('')}
+    <h3 style="margin-top:22px">Hero photo</h3>
+    <p><small>Ekhon: ${esc(site.hero_photo)}</small></p>
+    <input type="file" id="heroFile" accept="image/png,image/jpeg">
+    <br>
+    <button onclick="saveSite()">Save contact & stats</button>`;
+}
+
+async function saveSite() {
+  try {
+    site.whatsapp = $('s_wa').value.trim();
+    site.email = $('s_em').value.trim();
+    site.facebook = $('s_fb').value.trim();
+    site.instagram = $('s_ig').value.trim();
+    site.stats = [0, 1, 2].map(i => ({ number: Number($('n' + i).value) || 0, suffix: $('x' + i).value, label: $('l' + i).value }));
+    const hf = $('heroFile').files[0];
+    if (hf) {
+      const p = 'uploads/hero-' + Date.now() + '.png';
+      await uploadBinary(p, hf, 'Upload hero photo');
+      site.hero_photo = '/' + p;
+    }
+    await writeText('content/site.json', JSON.stringify(site, null, 2) + '\n', 'Update contact & stats');
+    flash('Save hoyeche. 1-2 minute por site e dekhbe.', true);
+    renderSite();
+  } catch (e) {
+    flash('Save hoyni: ' + e.message, false);
+  }
+}
+
+/* ---------- Selected Work ---------- */
+function renderWork() {
+  $('workView').innerHTML = `
+    <h3>Selected Work</h3>
+    <p><small>Category = service (jemon Graphics Design). Project = sub-section (jemon Banner Design). Chhobi ar video prottek project e add korun.</small></p>
+    <div id="svcList"></div>
+    <button class="ghost" onclick="addService()">+ Add category</button>
+    <button onclick="saveWork()">Save selected work</button>`;
+  drawServices();
+}
+
+function drawServices() {
+  $('svcList').innerHTML = work.services.map((sv, si) => `
+    <div class="item">
+      <div class="row">
+        <div><label>Category name</label><input value="${esc(sv.name)}" onchange="work.services[${si}].name=this.value"></div>
+        <div><label>Icon emoji (optional)</label><input value="${esc(sv.icon || '')}" onchange="work.services[${si}].icon=this.value"></div>
+        <div><label>&nbsp;</label><button class="danger" onclick="delService(${si})">Delete category</button></div>
+      </div>
+      ${(sv.projects || []).map((p, pi) => projectHTML(si, pi, p)).join('')}
+      <button class="ghost" onclick="addProject(${si})">+ Add project</button>
+    </div>`).join('');
+}
+
+function projectHTML(si, pi, p) {
+  return `
+    <div class="item" style="background:#fbfaff">
+      <div class="row">
+        <div><label>Project (sub-section) title</label><input value="${esc(p.title)}" onchange="work.services[${si}].projects[${pi}].title=this.value"></div>
+        <div><label>Link (Drive/YouTube, optional)</label><input value="${esc(p.link || '')}" onchange="work.services[${si}].projects[${pi}].link=this.value"></div>
+        <div><label>&nbsp;</label><button class="danger" onclick="delProject(${si},${pi})">Delete project</button></div>
+      </div>
+      <label>Images</label>
+      <div class="thumbs">${(p.images || []).map((u, ii) => `
+        <span><img src="${esc(u)}"><br><button class="danger" style="padding:4px 8px;margin:0" onclick="delImage(${si},${pi},${ii})">x</button></span>`).join('')}</div>
+      <input type="file" accept="image/*" multiple onchange="addImages(${si},${pi},this)">
+      <label>Videos (mp4, 25 MB er niche)</label>
+      ${(p.videos || []).map((u, vi) => `
+        <div><small>${esc(u)}</small> <button class="danger" style="padding:4px 8px" onclick="delVideo(${si},${pi},${vi})">x</button></div>`).join('')}
+      <input type="file" accept="video/mp4" onchange="addVideo(${si},${pi},this)">
+    </div>`;
+}
+
+function addService() { work.services.push({ name: 'New category', icon: '', projects: [] }); drawServices(); }
+function delService(si) { if (confirm('Category ta delete korben?')) { work.services.splice(si, 1); drawServices(); } }
+function addProject(si) { const sv = work.services[si]; (sv.projects = sv.projects || []).push({ title: 'New project', link: '', images: [], videos: [] }); drawServices(); }
+function delProject(si, pi) { if (confirm('Project ta delete korben?')) { work.services[si].projects.splice(pi, 1); drawServices(); } }
+function delImage(si, pi, ii) { work.services[si].projects[pi].images.splice(ii, 1); drawServices(); }
+function delVideo(si, pi, vi) { work.services[si].projects[pi].videos.splice(vi, 1); drawServices(); }
+
+async function addImages(si, pi, input) {
+  const files = [...input.files];
+  if (!files.length) return;
+  flash('Chhobi upload hochche...', true);
+  try {
+    const p = work.services[si].projects[pi];
+    p.images = p.images || [];
+    for (const f of files) {
+      const path = 'uploads/' + Date.now() + '-' + f.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      await uploadBinary(path, f, 'Upload project image');
+      p.images.push('/' + path);
+    }
+    drawServices();
+    flash(files.length + ' ta chhobi upload hoyeche. Ekhon "Save selected work" click korun.', true);
+  } catch (e) {
+    flash('Upload hoyni: ' + e.message, false);
+  }
+}
+
+async function addVideo(si, pi, input) {
+  const f = input.files[0];
+  if (!f) return;
+  if (f.size > 25 * 1024 * 1024) { flash('Video 25 MB er beshi. YouTube/Drive link use korun.', false); return; }
+  flash('Video upload hochche...', true);
+  try {
+    const path = 'uploads/' + Date.now() + '-' + f.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+    await uploadBinary(path, f, 'Upload project video');
+    const p = work.services[si].projects[pi];
+    p.videos = p.videos || [];
+    p.videos.push('/' + path);
+    drawServices();
+    flash('Video upload hoyeche. Ekhon "Save selected work" click korun.', true);
+  } catch (e) {
+    flash('Upload hoyni: ' + e.message, false);
+  }
+}
+
+async function saveWork() {
+  try {
+    await writeText('content/work.json', JSON.stringify(work, null, 2) + '\n', 'Update selected work');
+    flash('Save hoyeche. 1-2 minute por site e dekhbe.', true);
+  } catch (e) {
+    flash('Save hoyni: ' + e.message, false);
+  }
+}
+
+if (TOKEN) { $('token').value = TOKEN; saveToken(); }
+</script>
 </body>
 </html>
