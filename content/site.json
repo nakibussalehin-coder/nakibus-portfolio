@@ -15,10 +15,10 @@
       "label": "Years of Experience"
     },
     {
-      "number": 10,
+      "number": 20,
       "suffix": "+",
       "label": "Ad Campaigns Managed"
     }
   ],
-  "hero_photo": "/uploads/hero-photo.png"
+  "hero_photo": "/hero-photo.png"
 }
