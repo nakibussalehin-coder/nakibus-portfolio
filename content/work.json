@@ -2,7 +2,14 @@
   "services": [
     {
       "name": "Graphics Design",
-      "projects": []
+      "projects": [
+        {
+          "title": "Poster Design",
+          "link": "",
+          "images": [],
+          "videos": []
+        }
+      ]
     },
     {
       "name": "Video Editing",
