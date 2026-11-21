@@ -33,7 +33,7 @@
 
   <div class="card" id="tokenBox">
     <h3>GitHub connection</h3>
-    <p><small>Ekbar token diye connect korle ei browser e mone thakbe. Token ta shudhu apnar nijer computer e thakbe.</small></p>
+    <p><small>Connect once with your token. This browser will remember it, and the token is stored only on this device.</small></p>
     <label>GitHub token (github_pat_...)</label>
     <input id="token" type="password" placeholder="github_pat_...">
     <button onclick="saveToken()">Connect</button>
@@ -106,7 +106,7 @@ async function uploadBinary(path, file, message) {
 
 async function saveToken() {
   TOKEN = $('token').value.trim();
-  if (!TOKEN) { connFlash('Token ta din', false); return; }
+  if (!TOKEN) { connFlash('Please enter your token', false); return; }
   try {
     site = await readJSON('content/site.json');
     work = await readJSON('content/work.json');
@@ -117,7 +117,7 @@ async function saveToken() {
     renderSite();
     renderWork();
   } catch (e) {
-    connFlash('Connect hoyni: ' + e.message, false);
+    connFlash('Could not connect: ' + e.message, false);
   }
 }
 
@@ -135,11 +135,11 @@ function renderSite() {
   $('siteView').innerHTML = `
     <h3>Contact</h3>
     <div class="row">
-      <div><label>WhatsApp (880 diye, + chhara)</label><input id="s_wa" value="${esc(site.whatsapp)}"></div>
+      <div><label>WhatsApp (with 880, no +)</label><input id="s_wa" value="${esc(site.whatsapp)}"></div>
       <div><label>Email</label><input id="s_em" value="${esc(site.email)}"></div>
       <div><label>Facebook page URL</label><input id="s_fb" value="${esc(site.facebook)}"></div>
     </div>
-    <label>Instagram URL (khali rakhle button dekhabe na)</label>
+    <label>Instagram URL (leave empty to hide the button)</label>
     <input id="s_ig" value="${esc(site.instagram)}">
     <h3 style="margin-top:22px">Stats</h3>
     ${st.map((x, i) => `
@@ -149,7 +149,7 @@ function renderSite() {
         <div><label>Suffix</label><input id="x${i}" value="${esc(x.suffix)}"></div>
       </div>`).join('')}
     <h3 style="margin-top:22px">Hero photo</h3>
-    <p><small>Ekhon: ${esc(site.hero_photo)}</small></p>
+    <p><small>Current: ${esc(site.hero_photo)}</small></p>
     <input type="file" id="heroFile" accept="image/png,image/jpeg">
     <br>
     <button onclick="saveSite()">Save contact & stats</button>`;
@@ -169,10 +169,10 @@ async function saveSite() {
       site.hero_photo = '/' + p;
     }
     await writeText('content/site.json', JSON.stringify(site, null, 2) + '\n', 'Update contact & stats');
-    flash('Save hoyeche. 1-2 minute por site e dekhbe.', true);
+    flash('Saved. The site updates in 1-2 minutes.', true);
     renderSite();
   } catch (e) {
-    flash('Save hoyni: ' + e.message, false);
+    flash('Not saved: ' + e.message, false);
   }
 }
 
@@ -180,7 +180,7 @@ async function saveSite() {
 function renderWork() {
   $('workView').innerHTML = `
     <h3>Selected Work</h3>
-    <p><small>Category = service (jemon Graphics Design). Project = sub-section (jemon Banner Design). Chhobi ar video prottek project e add korun.</small></p>
+    <p><small>Category = service (e.g. Graphics Design). Sub-category = e.g. Banner Design. Add many photos and videos to each sub-category at once.</small></p>
     <div id="svcList"></div>
     <button class="ghost" onclick="addService()">+ Add category</button>
     <button onclick="saveWork()">Save selected work</button>`;
@@ -196,7 +196,7 @@ function drawServices() {
         <div><label>&nbsp;</label><button class="danger" onclick="delService(${si})">Delete category</button></div>
       </div>
       ${(sv.projects || []).map((p, pi) => projectHTML(si, pi, p)).join('')}
-      <button class="ghost" onclick="addProject(${si})">+ Add project</button>
+      <button class="ghost" onclick="addProject(${si})">+ Add sub-category</button>
     </div>`).join('');
 }
 
@@ -204,32 +204,32 @@ function projectHTML(si, pi, p) {
   return `
     <div class="item" style="background:#fbfaff">
       <div class="row">
-        <div><label>Project (sub-section) title</label><input value="${esc(p.title)}" onchange="work.services[${si}].projects[${pi}].title=this.value"></div>
+        <div><label>Sub-category title</label><input value="${esc(p.title)}" onchange="work.services[${si}].projects[${pi}].title=this.value"></div>
         <div><label>Link (Drive/YouTube, optional)</label><input value="${esc(p.link || '')}" onchange="work.services[${si}].projects[${pi}].link=this.value"></div>
-        <div><label>&nbsp;</label><button class="danger" onclick="delProject(${si},${pi})">Delete project</button></div>
+        <div><label>&nbsp;</label><button class="danger" onclick="delProject(${si},${pi})">Delete sub-category</button></div>
       </div>
       <label>Images</label>
       <div class="thumbs">${(p.images || []).map((u, ii) => `
         <span><img src="${esc(u)}"><br><button class="danger" style="padding:4px 8px;margin:0" onclick="delImage(${si},${pi},${ii})">x</button></span>`).join('')}</div>
       <input type="file" accept="image/*" multiple onchange="addImages(${si},${pi},this)">
-      <label>Videos (mp4, 25 MB er niche)</label>
+      <label>Videos (mp4, under 25 MB each)</label>
       ${(p.videos || []).map((u, vi) => `
         <div><small>${esc(u)}</small> <button class="danger" style="padding:4px 8px" onclick="delVideo(${si},${pi},${vi})">x</button></div>`).join('')}
-      <input type="file" accept="video/mp4" onchange="addVideo(${si},${pi},this)">
+      <input type="file" accept="video/mp4" multiple onchange="addVideo(${si},${pi},this)">
     </div>`;
 }
 
 function addService() { work.services.push({ name: 'New category', icon: '', projects: [] }); drawServices(); }
-function delService(si) { if (confirm('Category ta delete korben?')) { work.services.splice(si, 1); drawServices(); } }
-function addProject(si) { const sv = work.services[si]; (sv.projects = sv.projects || []).push({ title: 'New project', link: '', images: [], videos: [] }); drawServices(); }
-function delProject(si, pi) { if (confirm('Project ta delete korben?')) { work.services[si].projects.splice(pi, 1); drawServices(); } }
+function delService(si) { if (confirm('Delete this category?')) { work.services.splice(si, 1); drawServices(); } }
+function addProject(si) { const sv = work.services[si]; (sv.projects = sv.projects || []).push({ title: 'New sub-category', link: '', images: [], videos: [] }); drawServices(); }
+function delProject(si, pi) { if (confirm('Delete this sub-category?')) { work.services[si].projects.splice(pi, 1); drawServices(); } }
 function delImage(si, pi, ii) { work.services[si].projects[pi].images.splice(ii, 1); drawServices(); }
 function delVideo(si, pi, vi) { work.services[si].projects[pi].videos.splice(vi, 1); drawServices(); }
 
 async function addImages(si, pi, input) {
   const files = [...input.files];
   if (!files.length) return;
-  flash('Chhobi upload hochche...', true);
+  flash('Uploading images...', true);
   try {
     const p = work.services[si].projects[pi];
     p.images = p.images || [];
@@ -239,36 +239,40 @@ async function addImages(si, pi, input) {
       p.images.push('/' + path);
     }
     drawServices();
-    flash(files.length + ' ta chhobi upload hoyeche. Ekhon "Save selected work" click korun.', true);
+    flash(files.length + ' image(s) uploaded. Now click "Save selected work".', true);
   } catch (e) {
-    flash('Upload hoyni: ' + e.message, false);
+    flash('Upload failed: ' + e.message, false);
   }
 }
 
 async function addVideo(si, pi, input) {
-  const f = input.files[0];
-  if (!f) return;
-  if (f.size > 25 * 1024 * 1024) { flash('Video 25 MB er beshi. YouTube/Drive link use korun.', false); return; }
-  flash('Video upload hochche...', true);
+  const files = [...input.files];
+  if (!files.length) return;
+  const big = files.find(f => f.size > 25 * 1024 * 1024);
+  if (big) { flash('"' + big.name + '" is over 25 MB. Use a YouTube or Drive link instead.', false); input.value = ''; return; }
+  flash('Uploading ' + files.length + ' video(s)...', true);
   try {
-    const path = 'uploads/' + Date.now() + '-' + f.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-    await uploadBinary(path, f, 'Upload project video');
     const p = work.services[si].projects[pi];
     p.videos = p.videos || [];
-    p.videos.push('/' + path);
+    for (const f of files) {
+      const path = 'uploads/' + Date.now() + '-' + f.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      await uploadBinary(path, f, 'Upload project video');
+      p.videos.push('/' + path);
+    }
+    input.value = '';
     drawServices();
-    flash('Video upload hoyeche. Ekhon "Save selected work" click korun.', true);
+    flash(files.length + ' video(s) uploaded. Now click "Save selected work".', true);
   } catch (e) {
-    flash('Upload hoyni: ' + e.message, false);
+    flash('Upload failed: ' + e.message, false);
   }
 }
 
 async function saveWork() {
   try {
     await writeText('content/work.json', JSON.stringify(work, null, 2) + '\n', 'Update selected work');
-    flash('Save hoyeche. 1-2 minute por site e dekhbe.', true);
+    flash('Saved. The site updates in 1-2 minutes.', true);
   } catch (e) {
-    flash('Save hoyni: ' + e.message, false);
+    flash('Not saved: ' + e.message, false);
   }
 }
 
